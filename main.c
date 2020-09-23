@@ -1,100 +1,108 @@
+/*
+ * A C program implementation of customized framing for the project in Data and Digital Communications
+ * Term 3, A.Y. 2019-2020
+ *
+ * Input: Bits of information with Two-Dimensional Parity as the Error Detection Code (EDC)
+ * Output: Set of frames (Header | Payload | Trailer)
+ *
+ * Author: Jan Luis Antoc
+ * BS CpE, DLSU-Manila
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#define OUTPUT "Output.txt"
 
-// https://www.techiedelight.com/pass-2d-array-function-parameter/
 
 char *storingLongStr(char *str, unsigned int maxLength, unsigned int currSize);
-int numOfDigits(unsigned num);
+int numOfDigits(int num);
 void textToBinary(const char *text, int m, int n, char storage[m][n]);
 
 int main() {
+    // Variables needed for reading a string with an unknown length
     int maxLength = 128;
     int currSize = 0;
 
     char *inputFromEDC = malloc(maxLength);
     currSize = maxLength;
 
+    // Read the output of the EDC block
     inputFromEDC = storingLongStr(inputFromEDC, maxLength, currSize);
-    //printf("%s", inputFromEDC);
-    //for (int i = 0; i < strlen(inputFromEDC); i++) {
-    //    printf("%c", inputFromEDC[i]);
-    //}
 
-    int outputFileSize = strlen(OUTPUT);
-    //printf("%i", outputFileSize);
-    char outputFileBin[outputFileSize][8];
-
-    // Get the binary conversion of the output filename
-    //printf("\n");
-    textToBinary("Output.txt", outputFileSize, 8, outputFileBin);
-
-    int totSizeOPHeader = outputFileSize * 8;
-    char *outputFileHeader;
-    outputFileHeader = (char *)malloc(totSizeOPHeader * sizeof(char));
-
-    int index = 0;
-    for (int i = 0; i < outputFileSize; i++) {
-        for (int j = 0; j < 8; j++) {
-            *(outputFileHeader + index) = outputFileBin[i][j];
-            index++;
-        }
-    }
-
-    //for (int i = 0; i < totSizeOPHeader; i++) {
-    //    printf("%c", outputFileHeader[i]);
-    //}
-
-    // Succeeding line of codes will be for the framing
-    int frameTotSize = 16 + totSizeOPHeader + 405;
+    // Determines the size of the 2D array for the storage of the frames
+    // Calculation for the total size of the frame:
+    //  Start byte = 8 bits
+    //  Payload size (3 bytes MAX) = 24
+    //  Payload with EDC (45 bytes + 1 MAX) = 405
+    int frameTotSize = 445;
     int EDCLen = strlen(inputFromEDC);
     int groups = EDCLen / 405;
     int additionalGroup = EDCLen % 405;
 
-    //printf("%i\n", additionalGroup);
+    // Takes care of the instance that a block of bits has less than 44 bytes as payload
     if (additionalGroup != 0) {
         groups++;
     }
 
     char frames[groups][frameTotSize];
 
+    // Succeeding for loops are for the insertion of bytes in the frame
     for (int k = 0; k < groups; k++) {
         int maxEDC = 405;
+        // Used SOH as start byte
         char startOF[8] = "00000001";
-        char endOT[8] = "00000100";
         int indexOfFrame = 0;
 
+        // Lessen the maximum bits that would be read when the total payload + EDC is less than 44
+        // bytes
         if (additionalGroup != 0) {
             if (k == groups - 1) {
                 maxEDC = additionalGroup;
-                //printf("%i\n", maxEDC);
             }
         }
 
-        // For the start byte
+        // Insertion of the start byte to the frame (SOH)
         for (int a = 0; a < 8; a++) {
             frames[k][indexOfFrame] = startOF[a];
             indexOfFrame++;
         }
 
-        // For the name of the output file
-        for (int b = 0; b < totSizeOPHeader; b++) {
-            frames[k][indexOfFrame] = outputFileHeader[b];
+        // Determining the binary conversion of the digits of the payload size
+        int payloadSize = numOfDigits(maxEDC / 9);
+        char payloadSizeChar[payloadSize][8];
+        char sizeToStr[2];
+
+        itoa(maxEDC, sizeToStr, 10);
+        textToBinary(sizeToStr, payloadSize, 8, payloadSizeChar);
+
+        // Creating the storage for the payload size, converted to binary
+        int payloadSizeHeader = payloadSize * 8;
+        char *payloadSizeHeaderStr;
+        payloadSizeHeaderStr = (char *)malloc(payloadSizeHeader * sizeof(char));
+
+        int index = 0;
+        for (int i = 0; i < payloadSize; i++) {
+            for (int j = 0; j < 8; j++) {
+                *(payloadSizeHeaderStr + index) = payloadSizeChar[i][j];
+                index++;
+            }
+        }
+
+        // Insertion of the payload size as the header of the frame
+        for (int b = 0; b < payloadSizeHeader; b++) {
+            frames[k][indexOfFrame] = payloadSizeHeaderStr[b];
             indexOfFrame++;
         }
 
-        //for (int t = 0; t < 8 + totSizeOPHeader; t++) {
-        //    printf("%c", frames[k][t]);
-        //}
-        printf("\n");
+        // Frees memory allocated to the storage of the payload size as the header
+        free(payloadSizeHeaderStr);
+        payloadSizeHeaderStr = NULL;
 
-        // For the payload
+        // Takes care of the payload and the parity bits (column and row)
         char parityBits[48];
         int indexOfParityBits = 0;
-        // Separate the parity byte
-        //printf("%i", maxEDC - 9);
+
+        // Separate the column and row parities from the payload
+        // Insert directly the payload to the frame
         for (int c = 0; c < maxEDC; c++) {
             if (((c + 1) % 9 == 0) || c >= maxEDC - 9) {
                 parityBits[indexOfParityBits] = inputFromEDC[c];
@@ -105,68 +113,82 @@ int main() {
             }
         }
 
-        // Displaying output until payload
-        for (int t = 0; t < indexOfFrame; t++) {
-            printf("%c", frames[k][t]);
-        }
-        //printf("\n");
+        // Separation of the parity byte from the column parities
+        char parityByte[8];
+        int indexOfParityByte = 0;
+        int len = strlen(parityBits);
 
-        while (strlen(parityBits) % 8 == 0) {
-            int len = strlen(parityBits);
-            parityBits[len] = '0';
-            parityBits[len + 1] = '\0';
+        for (int d = len - 9; d < len - 1; d++) {
+                parityByte[indexOfParityByte] = parityBits[d];
+                indexOfParityByte++;
         }
 
-        int parityLen = strlen(parityBits);
-
-        // For the parity bits
-        for (int d = 0; d < parityLen; d++) {
-            frames[k][indexOfFrame] = parityBits[0];
-            indexOfFrame++;
-        }
-
-        // For the trailer
+        // Insertion of the parity byte to the frame
         for (int e = 0; e < 8; e++) {
-            frames[k][indexOfFrame] = endOT[e];
+            frames[k][indexOfFrame] = parityByte[e];
             indexOfFrame++;
         }
 
-        //for (int t = 0; t < frameTotSize; t++) {
-        //    printf("%c", frames[k][t]);
-        //}
-        //printf("\n");
+        // Put the last column parity to the index 0 of the parity byte position
+        parityBits[len - 9] = parityBits[len - 1];
+
+        // Making sure that the column parities has a bit length of divisible by 16
+        // Note: The frame is in per byte basis
+        int newSizeParityBits = len - 8;
+        int copyNewSize = newSizeParityBits;
+
+        while ((newSizeParityBits % 8) != 0) {
+            newSizeParityBits++;
+        }
+
+        char newParityBits[newSizeParityBits];
+        indexOfParityBits = 0;
+
+        // Copying the column parities and assigning 0 as an extender to make a byte for each
+        // bit that will not add up to 8 bits
+        for (int f = 0; f < newSizeParityBits; f++) {
+            if (indexOfParityBits < copyNewSize) {
+                newParityBits[f] = parityBits[indexOfParityBits];
+                indexOfParityBits++;
+            } else {
+                newParityBits[f] = '0';
+            }
+        }
+
+        // Insertion of the column parities to the frame
+        for (int g = 0; g < newSizeParityBits; g++) {
+            frames[k][indexOfFrame] = newParityBits[g];
+            indexOfFrame++;
+        }
+
+        // Used EOT as stop byte
+        char endOF[8] = "00000100";
+        // Insertion of the end of the frame (EOT)
+        for (int h = 0; h < 8; h++) {
+            frames[k][indexOfFrame] = endOF[h];
+            indexOfFrame++;
+        }
     }
 
-    // Displaying the final frame(s)
-    int totSizeFrame = groups * frameTotSize;
-    char *frameOutput;
-    frameOutput = (char *)malloc(totSizeFrame * sizeof(char));
-
-    int frameIdx = 0;
-    for (int f = 0; f < groups; f++) {
-        for (int g = 0; g < 8; g++) {
-            char c = frames[f][g];
-            if (c == '\0') {
+    // Output of this program: Display all the frames
+    for (int t = 0; t < groups; t++) {
+        for (int u = 0; u < frameTotSize; u++) {
+            char bit = frames[t][u];
+            if (bit != '0' && bit != '1') {
                 break;
             } else {
-                *(frameOutput + frameIdx) = frames[f][g];
-                //printf("%c", *(frameOutput + frameIdx));
-                frameIdx++;
+                printf("%c", bit);
             }
         }
     }
 
-    //for (int h = 0; h < totSizeFrame; h++) {
-    //    printf("%c", frameOutput[h]);
-    //}
-
-    free(outputFileHeader);
     free(inputFromEDC);
     inputFromEDC= NULL;
     return 0;
 }
 
-int numOfDigits(unsigned num) {
+// For determining the number of digits in an integer
+int numOfDigits(int num) {
     if (num < 10) {
         return 1;
     }
@@ -205,15 +227,15 @@ void textToBinary(const char *text, int m, int n, char storage[m][n]) {
         binaryChar = (char *)malloc(32 + 1);
 
         int counter = 0;
+        // Divide by 2 while the number(or the char conversion to int) is greater than 0
         while (number > 0) {
             *(binaryChar + counter) = (number % 2) + '0';
-            //printf("%c", binaryChar[i]);
             number = number / 2;
             counter++;
         }
-        //printf("\n");
         strrev(binaryChar);
 
+        // Making sure each converted character is 8 bits long
         int additionalZero = 8 - counter;
         int counterCopy = counter;
         if (additionalZero != 0) {
@@ -228,12 +250,5 @@ void textToBinary(const char *text, int m, int n, char storage[m][n]) {
             storage[i][idxOfStorage] = binaryChar[y];
             idxOfStorage++;
         }
-
-        //for (int b = 0; b < 8; b++) {
-        //    printf("%c", *((storage + i) + b));
-        //}
-        //printf("\n");
     }
 }
-
-
