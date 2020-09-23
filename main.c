@@ -31,9 +31,10 @@ int main() {
     // Determines the size of the 2D array for the storage of the frames
     // Calculation for the total size of the frame:
     //  Start byte = 8 bits
-    //  Payload size (3 bytes MAX) = 24
-    //  Payload with EDC (45 bytes + 1 MAX) = 405
-    int frameTotSize = 445;
+    //  Payload size (2 bytes MAX) = 16 bits
+    //  Payload with EDC (45 bytes + 1 MAX) = 405 bits
+    //  Stop byte = 8 bits
+    int frameTotSize = 437;
     int EDCLen = strlen(inputFromEDC);
     int groups = EDCLen / 405;
     int additionalGroup = EDCLen % 405;
@@ -49,7 +50,6 @@ int main() {
     for (int k = 0; k < groups; k++) {
         int maxEDC = 405;
         // Used SOH as start byte
-        char startOF[8] = "00000001";
         int indexOfFrame = 0;
 
         // Lessen the maximum bits that would be read when the total payload + EDC is less than 44
@@ -60,38 +60,58 @@ int main() {
             }
         }
 
+        char startOF[8] = "00000001";
         // Insertion of the start byte to the frame (SOH)
         for (int a = 0; a < 8; a++) {
             frames[k][indexOfFrame] = startOF[a];
+            printf("%c", frames[k][indexOfFrame]);
             indexOfFrame++;
         }
+        //printf("\n");
 
         // Determining the binary conversion of the digits of the payload size
-        int payloadSize = numOfDigits(maxEDC / 9);
-        char payloadSizeChar[payloadSize][8];
+        int payloadEDCSize = maxEDC / 9;
+        int payloadSizeDigits = numOfDigits(payloadEDCSize);
+        char payloadSizeChar[payloadSizeDigits][8];
         char sizeToStr[2];
 
-        itoa(maxEDC, sizeToStr, 10);
-        textToBinary(sizeToStr, payloadSize, 8, payloadSizeChar);
+        itoa(payloadEDCSize, sizeToStr, 10);
+
+
+        if (payloadSizeDigits == 1) {
+            char temp = sizeToStr[0];
+            sizeToStr[0] = '0';
+            sizeToStr[1] = temp;
+        }
+        textToBinary(sizeToStr, payloadEDCSize, 8, payloadSizeChar);
 
         // Creating the storage for the payload size, converted to binary
-        int payloadSizeHeader = payloadSize * 8;
+        int payloadSizeHeader = payloadSizeDigits * 8;
+        //printf("%i\n", payloadSizeHeader);
         char *payloadSizeHeaderStr;
         payloadSizeHeaderStr = (char *)malloc(payloadSizeHeader * sizeof(char));
 
         int index = 0;
-        for (int i = 0; i < payloadSize; i++) {
+        for (int i = 0; i < payloadSizeDigits; i++) {
             for (int j = 0; j < 8; j++) {
                 *(payloadSizeHeaderStr + index) = payloadSizeChar[i][j];
                 index++;
             }
         }
 
+        for (int t = 0; t < indexOfFrame; t++) {
+            printf("%c", frames[k][t]);
+        }
+
+        printf("\n");
+
         // Insertion of the payload size as the header of the frame
         for (int b = 0; b < payloadSizeHeader; b++) {
             frames[k][indexOfFrame] = payloadSizeHeaderStr[b];
+            //printf("%c", frames[k][indexOfFrame]);
             indexOfFrame++;
         }
+        //printf("\n");
 
         // Frees memory allocated to the storage of the payload size as the header
         free(payloadSizeHeaderStr);
@@ -167,18 +187,6 @@ int main() {
         for (int h = 0; h < 8; h++) {
             frames[k][indexOfFrame] = endOF[h];
             indexOfFrame++;
-        }
-    }
-
-    // Output of this program: Display all the frames
-    for (int t = 0; t < groups; t++) {
-        for (int u = 0; u < frameTotSize; u++) {
-            char bit = frames[t][u];
-            if (bit != '0' && bit != '1') {
-                break;
-            } else {
-                printf("%c", bit);
-            }
         }
     }
 
