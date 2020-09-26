@@ -7,6 +7,8 @@
  *
  * Author: Jan Luis Antoc
  * BS CpE, DLSU-Manila
+ *
+ * Last updated: September 26, 2020
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +22,7 @@ void textToBinary(const char *text, int m, int n, char storage[m][n]);
 int main() {
     // Variables needed for reading a string with an unknown length
     int maxLength = 128;
-    int currSize = 0;
+    int currSize;
 
     char *inputFromEDC = malloc(maxLength);
     currSize = maxLength;
@@ -34,9 +36,9 @@ int main() {
     //  Payload size (2 bytes MAX) = 16 bits
     //  Payload with EDC (45 bytes + 1 MAX) = 405 bits
     //  Stop byte = 8 bits
+    //  Additional three bits on the parities for inputting by byte basis
     int frameTotSize = 440;
     int EDCLen = strlen(inputFromEDC);
-    //printf("%i\n", EDCLen);
     int groups = EDCLen / 405;
     int additionalGroup = EDCLen % 405;
 
@@ -46,6 +48,8 @@ int main() {
     }
 
     char frames[groups][frameTotSize];
+    // Index used in getting the specific bits from the output of EDC
+    // Counter for moving  the starting position of reading input after each frame
     int indexInputEDC = 0;
     int counter = 0;
 
@@ -55,54 +59,40 @@ int main() {
         // Used SOH as start byte
         int indexOfFrame = 0;
 
-        // Lessen the maximum bits that would be read when the total payload + EDC is less than 44
+        // Lessen the maximum bits that would be read when the total payload + EDC is less than 45
         // bytes
         if (additionalGroup != 0) {
             if (k == groups - 1) {
                 maxEDC = additionalGroup;
             }
         }
-
+        // Each payload or the parity byte has 9 bits each
         int payloadEDCSize = maxEDC / 9;
-
-        //printf("MaxEDC: %i\n", maxEDC);
         counter += maxEDC;
 
         char startOF[8] = "00000001";
         // Insertion of the start byte to the frame (SOH)
         for (int a = 0; a < 8; a++) {
             frames[k][indexOfFrame] = startOF[a];
-            //printf("%c\n", frames[k][indexOfFrame]);
             indexOfFrame++;
         }
 
-        // Here, okay!
-
         // Determining the binary conversion of the digits of the payload size
-        //printf("Payload Size: %i\n", payloadEDCSize);
         int payloadSizeDigits = numOfDigits(payloadEDCSize);
         char payloadSizeChar[2][8];
         char sizeToStr[3];
 
         itoa(payloadEDCSize, sizeToStr, 10);
 
-        //printf("Digits: %i\n", payloadSizeDigits);
-        //printf("%s\n", sizeToStr);
+        // If the payload is less than 10, append 0 before the number
         if (payloadSizeDigits == 1) {
             char temp = sizeToStr[0];
             sizeToStr[0] = '0';
             sizeToStr[1] = temp;
         }
-        //printf("%s\n", sizeToStr);
 
         textToBinary(sizeToStr, 2, 8, payloadSizeChar);
 
-        //for (int i = 0; i < 2; i++) {
-        //    for (int j = 0; j < 8; j++) {
-        //        printf("%c", payloadSizeChar[i][j]);
-        //    }
-        //}
-        //printf("\n");
         // Creating the storage for the payload size, converted to binary
         int payloadSizeHeader = 16;
         char *payloadSizeHeaderStr;
@@ -116,8 +106,6 @@ int main() {
             }
         }
 
-        // Here, not okay!
-
         // Insertion of the payload size as the header of the frame
         for (int b = 0; b < payloadSizeHeader; b++) {
             frames[k][indexOfFrame] = payloadSizeHeaderStr[b];
@@ -129,13 +117,12 @@ int main() {
         payloadSizeHeaderStr = NULL;
 
         // Takes care of the payload and the parity bits (column and row)
-        payloadEDCSize = maxEDC / 9;
+        //payloadEDCSize = maxEDC / 9;
         char parityBits[payloadEDCSize + 8];
         int indexOfParityBits = 0;
 
         // Separate the column and row parities from the payload
         // Insert directly the payload to the frame
-
         for (int c = indexInputEDC; c < counter; c++) {
             if (((c + 1) % 9 == 0) || c >= counter - 9) {
                 parityBits[indexOfParityBits] = inputFromEDC[c];
@@ -150,11 +137,6 @@ int main() {
         // Separation of the parity byte from the column parities
         char parityByte[8];
         int indexOfParityByte = 0;
-
-        //for (int i = 0; i < indexOfParityBits; i++) {
-        //    printf("%c", parityBits[i]);
-        //}
-        //printf("\n");
 
         for (int d = indexOfParityBits - 9; d < indexOfParityBits - 1; d++) {
             parityByte[indexOfParityByte] = parityBits[d];
@@ -199,8 +181,6 @@ int main() {
             indexOfFrame++;
         }
 
-        //printf("Index: %i\n", indexOfFrame);
-
         // Used EOT as stop byte
         char endOF[8] = "00000100";
         // Insertion of the end of the frame (EOT)
@@ -208,11 +188,10 @@ int main() {
             frames[k][indexOfFrame] = endOF[h];
             indexOfFrame++;
         }
-        //parityBits[0] = '\0';
     }
 
     for (int t = 0; t < groups; t++) {
-        for (int u = 0; u < 450; u++) {
+        for (int u = 0; u < 440; u++) {
             char bit = frames[t][u];
             if (bit != '0' && bit != '1') {
                 break;
@@ -220,7 +199,6 @@ int main() {
                 printf("%c", bit);
             }
         }
-        //printf("\n");
     }
 
     free(inputFromEDC);
