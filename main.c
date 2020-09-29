@@ -47,11 +47,9 @@ int main() {
         if (additionalGroup < 18) {
             printf("Error: Input less than the minimum payload and EDC size!");
             return 0;
-        } else if (additionalGroup % 9 != 0) {
-            printf("Error: Invalid payload and EDC size!");
-            return 0;
+        } else {
+            groups++;
         }
-        groups++;
     }
 
     char frames[groups][frameTotSize];
